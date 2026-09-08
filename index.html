@@ -1694,11 +1694,19 @@
     }
   }
 
-  async function moveItem(kind, group, item, dir){
-    const idx = group.findIndex(i => i.id === item.id);
-    const swap = idx + dir;
-    if(idx < 0 || swap < 0 || swap >= group.length) return;
-    const a = group[idx], b = group[swap];
+  // Resolves against the LIVE catalog at the moment of the tap, not whatever
+  // objects were current when the row was drawn — the Firebase listener can
+  // replace catalog.habits/rewards with fresh objects at any time (e.g. right
+  // after editing categories), which would otherwise silently orphan a stale
+  // reference and make the tap do nothing.
+  async function moveItem(kind, groupIds, itemId, dir){
+    const list = kind === 'habit' ? catalog.habits : catalog.rewards;
+    const idx = groupIds.indexOf(itemId);
+    const swapId = groupIds[idx + dir];
+    if(idx < 0 || swapId == null) return;
+    const a = list.find(x => x.id === itemId);
+    const b = list.find(x => x.id === swapId);
+    if(!a || !b) return;
     const tmp = a.order; a.order = b.order; b.order = tmp;
     if(kind === 'habit'){ await saveHabits(); renderHabits(); }
     else { await saveRewards(); renderRewards(); }
@@ -1792,9 +1800,10 @@
     });
     getCategories().forEach(cat=>{
       const group = sortByOrder(catalog.habits.filter(h => (h.category||'other') === cat.key));
+      const groupIds = group.map(x=>x.id);
       group.forEach(h=>{
-        el.querySelectorAll(`[data-up="${h.id}"]`).forEach(b=>b.addEventListener('click', ()=>moveItem('habit', group, h, -1)));
-        el.querySelectorAll(`[data-down="${h.id}"]`).forEach(b=>b.addEventListener('click', ()=>moveItem('habit', group, h, 1)));
+        el.querySelectorAll(`[data-up="${h.id}"]`).forEach(b=>b.addEventListener('click', ()=>moveItem('habit', groupIds, h.id, -1)));
+        el.querySelectorAll(`[data-down="${h.id}"]`).forEach(b=>b.addEventListener('click', ()=>moveItem('habit', groupIds, h.id, 1)));
       });
     });
   }
@@ -1852,8 +1861,9 @@
       btn.addEventListener('click', ()=> toggleFavorite('reward', catalog.rewards.find(r=>r.id===btn.dataset.fav)));
     });
     all.forEach(r=>{
-      el.querySelectorAll(`[data-up="${r.id}"]`).forEach(b=>b.addEventListener('click', ()=>moveItem('reward', all, r, -1)));
-      el.querySelectorAll(`[data-down="${r.id}"]`).forEach(b=>b.addEventListener('click', ()=>moveItem('reward', all, r, 1)));
+      const allIds = all.map(x=>x.id);
+      el.querySelectorAll(`[data-up="${r.id}"]`).forEach(b=>b.addEventListener('click', ()=>moveItem('reward', allIds, r.id, -1)));
+      el.querySelectorAll(`[data-down="${r.id}"]`).forEach(b=>b.addEventListener('click', ()=>moveItem('reward', allIds, r.id, 1)));
     });
   }
 
